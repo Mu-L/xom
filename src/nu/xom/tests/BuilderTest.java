@@ -41,6 +41,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URLEncoder;
 
+import javax.xml.parsers.FactoryConfigurationError;
+
 import org.apache.xerces.parsers.SAXParser;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
@@ -65,6 +67,7 @@ import nu.xom.Document;
 import nu.xom.Element;
 import nu.xom.Elements;
 import nu.xom.NodeFactory;
+import nu.xom.ParserBugException;
 import nu.xom.ParsingException;
 import nu.xom.ProcessingInstruction;
 import nu.xom.Serializer;
@@ -3010,38 +3013,75 @@ public class BuilderTest extends XOMTestCase {
     // parsers, especially Piccolo. 
     private static class ExceptionTester extends XMLFilterImpl {
         
-        private Exception ex;
+        private Throwable ex;
         
-        ExceptionTester(Exception ex) {
+        ExceptionTester(Throwable ex) {
             this.ex = ex;
         }
         
         public void parse(InputSource in) throws IOException, SAXException {
             if (ex instanceof IOException) throw (IOException) ex;
             else if (ex instanceof SAXException) throw (SAXException) ex;
-            else throw (RuntimeException) ex;
+            else if (ex instanceof RuntimeException) throw (RuntimeException) ex;
+            else throw (Error) ex;
         }
         
     }
     
     
     public void testParserThrowsNullPointerException() 
-      throws SAXException, IOException {
-        
+      throws SAXException, IOException, ParsingException {
+        checkParserThrows(new NullPointerException());        
+    }
+
+
+    public void testParserThrowsStackOverflowError()
+      throws SAXException, IOException, ParsingException {
+        checkParserThrows(new StackOverflowError());
+    }
+    
+    
+    public void testParserThrowsAssertionError()
+      throws SAXException, IOException, ParsingException {
+        checkParserThrows(new AssertionError());
+    }
+
+
+    public void testParserThrowsLinkageError()
+        throws SAXException, IOException, ParsingException {
+        checkParserThrows(new LinkageError());
+    }
+
+    
+    public void testParserThrowsNoClassDefFoundError()
+        throws SAXException, IOException, ParsingException {
+        checkParserThrows(new NoClassDefFoundError());
+    }
+
+
+    public void testParserThrowsFactoryConfigurationError()
+        throws SAXException, IOException, ParsingException {
+        checkParserThrows(new FactoryConfigurationError());
+    }
+    
+    
+    private static void checkParserThrows(Throwable throwable)
+      throws SAXException, IOException, ParsingException {
+
         XMLReader parser = XMLReaderFactory.createXMLReader(
-          "org.apache.xerces.parsers.SAXParser");
-        Exception cause = new NullPointerException();
-        XMLFilter filter = new ExceptionTester(cause);
+            "org.apache.xerces.parsers.SAXParser");
+        XMLFilter filter = new ExceptionTester(throwable);
         filter.setParent(parser);
         Builder builder = new Builder(filter);
-        
+
         try {
             builder.build("<data/>");
         }
-        catch (ParsingException success) {
-            assertEquals(cause, success.getCause());
+        catch (ParserBugException success) {
+            assertEquals(throwable, success.getCause());
+            assertTrue(success.getMessage().contains(ExceptionTester.class.getName()));
         }
-        
+
     }
     
     
